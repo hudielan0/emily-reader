@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Emily阅读</title>
+  <link rel="stylesheet" href="/src/styles/app.css">
+</head>
+<body>
+  <section id="empty" class="empty">
+    <div class="logo">📚</div>
+    <h1>Emily阅读</h1>
+    <p>选一本电脑上的 EPUB 文件开始阅读。</p>
+    <label class="primary">选择 EPUB 文件<input type="file" accept=".epub,application/epub+zip" data-file hidden></label>
+  </section>
+
+  <section id="reading" class="reading" hidden>
+    <div class="spread"><div id="viewer"></div></div>
+    <div class="dock">
+      <!-- 临时：M3 会换成正式的目录弹窗 -->
+      <select id="chapters" title="章节（临时）"></select>
+      <button id="prev" title="上一页">◀</button>
+      <span id="where" class="where"></span>
+      <button id="next" title="下一页">▶</button>
+      <label class="btn">换书<input type="file" accept=".epub,application/epub+zip" data-file hidden></label>
+    </div>
+  </section>
+
+  <div id="error" class="error" hidden></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

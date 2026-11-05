@@ -1,0 +1,108 @@
+// Generate two small, copyright-free EPUB 3 books for tests: tests/fixtures/{zh,en}-sample.epub
+// Each has 4 chapters, a nav TOC, one PNG image, a long code line and a wide table.
+import JSZip from "jszip";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const outDir = join(root, "tests", "fixtures");
+
+// 8x8 orange PNG
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGPYuqEeK2IYSRIAJYOfAfMEmxEAAAAASUVORK5CYII=",
+  "base64",
+);
+
+const ZH_PARAS = [
+  "清晨的山路上还挂着薄雾，脚下的石阶被露水打湿，踩上去有一点滑。远处偶尔传来几声鸟叫，很快又安静下来。",
+  "村口那棵老槐树据说已经有三百多年了。树下摆着两张竹椅，午后总有几位老人坐在那里，看着来往的人。",
+  "傍晚时分，山那边的云一层一层地烧起来，先是金色，再是橘红，最后变成一种说不清的紫。",
+  "夜里下了一场雨。雨点打在瓦片上，声音密密的，像有人在屋顶上轻轻走路。",
+];
+const EN_PARAS = [
+  "The lighthouse stood at the edge of the island, white paint peeling in long strips where the salt wind had worked at it for years.",
+  "The supply boat came on the first Monday of every month. It brought flour, coffee, oil for the lamp, and a small bundle of letters.",
+  "On calm nights he sat on the gallery outside the lamp room and watched the beam sweep across the water.",
+  "Storms were different. When the wind rose, the whole tower hummed like a struck bell.",
+];
+
+export const BOOKS = {
+  zh: {
+    lang: "zh-CN", title: "测试书：山间小记", author: "测试作者",
+    chapters: ["第一章　上山", "第二章　老槐树", "第三章　雨夜", "第四章　告别"], paras: ZH_PARAS,
+  },
+  en: {
+    lang: "en", title: "Test Book: The Lighthouse", author: "Test Author",
+    chapters: ["Chapter 1 The Island", "Chapter 2 Letters", "Chapter 3 The Storm", "Chapter 4 Goodbye"], paras: EN_PARAS,
+  },
+};
+
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function chapterXhtml(book, i) {
+  const body = [];
+  body.push(`<h1>${esc(book.chapters[i])}</h1>`);
+  for (let k = 0; k < 30; k++) body.push(`<p>${esc(book.paras[(i + k) % book.paras.length])}</p>`);
+  if (i === 0) body.splice(3, 0, `<p><img src="../images/dot.png" alt="test image" style="width:120px"/></p>`);
+  if (i === 1) {
+    body.splice(4, 0, `<pre><code>const veryLongLine = "${"x".repeat(160)}"; // long code line</code></pre>`);
+    const cells = n => Array.from({ length: 8 }, (_, c) => `<${n}>column-${c + 1}-content</${n}>`).join("");
+    body.splice(6, 0, `<table><tr>${cells("th")}</tr><tr>${cells("td")}</tr></table>`);
+  }
+  return `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${book.lang}" lang="${book.lang}">
+<head><title>${esc(book.chapters[i])}</title></head>
+<body>
+${body.join("\n")}
+</body>
+</html>`;
+}
+
+export async function makeEpub(key) {
+  const book = BOOKS[key];
+  const zip = new JSZip();
+  zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
+  zip.file("META-INF/container.xml", `<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
+</container>`);
+  const items = book.chapters.map((_, i) => `<item id="ch${i + 1}" href="text/ch${i + 1}.xhtml" media-type="application/xhtml+xml"/>`).join("\n    ");
+  const spine = book.chapters.map((_, i) => `<itemref idref="ch${i + 1}"/>`).join("");
+  zip.file("OEBPS/content.opf", `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="uid">urn:emily-reader:test:${key}</dc:identifier>
+    <dc:title>${esc(book.title)}</dc:title>
+    <dc:creator>${esc(book.author)}</dc:creator>
+    <dc:language>${book.lang}</dc:language>
+    <meta property="dcterms:modified">2026-01-01T00:00:00Z</meta>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="img" href="images/dot.png" media-type="image/png"/>
+    ${items}
+  </manifest>
+  <spine>${spine}</spine>
+</package>`);
+  const navList = book.chapters.map((t, i) => `<li><a href="text/ch${i + 1}.xhtml">${esc(t)}</a></li>`).join("");
+  zip.file("OEBPS/nav.xhtml", `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>TOC</title></head>
+<body><nav epub:type="toc"><ol>${navList}</ol></nav></body>
+</html>`);
+  zip.file("OEBPS/images/dot.png", PNG);
+  book.chapters.forEach((_, i) => zip.file(`OEBPS/text/ch${i + 1}.xhtml`, chapterXhtml(book, i)));
+  return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", mimeType: "application/epub+zip" });
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  mkdirSync(outDir, { recursive: true });
+  for (const key of Object.keys(BOOKS)) {
+    const file = join(outDir, `${key}-sample.epub`);
+    writeFileSync(file, await makeEpub(key));
+    console.log("wrote", file);
+  }
+}

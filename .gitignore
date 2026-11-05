@@ -5,3 +5,8 @@ __pycache__/
 .venv/
 node_modules/
 .vmark/
+node_modules/
+dist/
+tests/fixtures/*.epub
+test-results/
+playwright-report/
