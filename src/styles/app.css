@@ -42,25 +42,6 @@ button:hover, .btn:hover, select:hover { border-color: var(--accent); color: var
   .dock { gap: 6px; }
 }
 
-/* Page-turn zones: they fill the page margins exactly (same width as .spread's side padding), so they
-   never cover text. The arrow is faint until the mouse comes near. */
-.spread { --margin-x: 40px; padding-left: var(--margin-x); padding-right: var(--margin-x); }
-.edge {
-  position: absolute; top: 0; bottom: 0; width: var(--margin-x); padding: 0; margin: 0;
-  border: none; border-radius: 0; background: transparent; color: var(--muted);
-  display: flex; align-items: center; justify-content: center;
-}
-.edge-prev { left: 0; border-radius: 4px 0 0 4px; }
-.edge-next { right: 0; border-radius: 0 4px 4px 0; }
-.edge span { font-size: 34px; line-height: 1; opacity: .3; transition: opacity .15s; pointer-events: none; }
-.edge:hover { background: color-mix(in srgb, var(--desk) 45%, transparent); color: var(--accent); }
-.edge:hover span, .edge:focus-visible span { opacity: 1; }
-.edge:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-@media (max-width: 760px) {
-  .spread { --margin-x: 22px; }
-  .edge span { font-size: 24px; opacity: .45; }
-}
-
 /* Dock: progress bar and position */
 .dock { position: relative; }
 .dock input[type=range] { flex: 2; min-width: 60px; accent-color: var(--accent); cursor: pointer; }
