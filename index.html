@@ -15,13 +15,16 @@
   </section>
 
   <section id="reading" class="reading" hidden>
-    <div class="spread"><div id="viewer"></div></div>
+    <div class="spread">
+      <div id="viewer"></div>
+      <!-- page turning: the whole left/right page margin is clickable, the arrow sits in its middle -->
+      <button id="prev" class="edge edge-prev" title="上一页（←）" aria-label="上一页"><span>‹</span></button>
+      <button id="next" class="edge edge-next" title="下一页（→）" aria-label="下一页"><span>›</span></button>
+    </div>
     <div class="dock">
       <button id="toc-btn" title="目录">☰ 目录</button>
       <button id="back" title="回到跳转前的位置" hidden>↩ 返回</button>
-      <button id="prev" title="上一页（←）">◀</button>
       <input id="progress" type="range" min="0" max="1000" value="0" disabled title="正在计算全书进度…" aria-label="全书进度">
-      <button id="next" title="下一页（→）">▶</button>
       <span id="where" class="where"></span>
       <button id="look-btn" title="字号、字体、深色">Aa</button>
       <label class="btn">换书<input type="file" accept=".epub,application/epub+zip" data-file hidden></label>
