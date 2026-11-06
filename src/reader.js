@@ -1,6 +1,7 @@
 // Thin wrapper around epub.js: open a book into a container in two-page ("spread") mode.
 import ePub from "epubjs";
 import { flattenToc } from "./toc.js";
+import { enableZoom } from "./zoom.js";
 
 const OPEN_TIMEOUT_MS = 20_000;
 
@@ -18,7 +19,7 @@ function withTimeout(promise, ms, message) {
   ]).finally(() => clearTimeout(timer));
 }
 
-export async function openBook(container, data, { onRelocated } = {}) {
+export async function openBook(container, data, { onRelocated, onImageClick } = {}) {
   if (!looksLikeEpub(data)) throw new Error("这不是有效的 EPUB 文件");
   const book = ePub(data);
   // epub.js never settles on some broken files, so give up after a while instead of hanging
@@ -32,6 +33,7 @@ export async function openBook(container, data, { onRelocated } = {}) {
     allowScriptedContent: false,
   });
   if (onRelocated) rendition.on("relocated", onRelocated);
+  if (onImageClick) rendition.hooks.content.register(contents => enableZoom(contents.document, onImageClick));
   await rendition.display();
   const [nav, meta] = await Promise.all([book.loaded.navigation, book.loaded.metadata]);
 

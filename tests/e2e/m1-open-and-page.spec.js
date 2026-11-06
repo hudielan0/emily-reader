@@ -31,8 +31,10 @@ test("opens a Chinese EPUB as a two-page spread with text and image", async ({ p
   await expect(book(page).locator("p").first()).toContainText("清晨的山路");
   expect(await page.evaluate(() => window.__reader.isSpread())).toBe(true);
   await expect(page).toHaveTitle(/测试书：山间小记/);
-  const imgOk = await book(page).locator("img").evaluate(img => img.complete && img.naturalWidth > 0);
-  expect(imgOk).toBe(true);
+  for (const alt of ["test image", "diagram"]) {
+    const imgOk = await book(page).locator(`img[alt="${alt}"]`).evaluate(img => img.complete && img.naturalWidth > 0);
+    expect(imgOk, `${alt} loaded`).toBe(true);
+  }
 });
 
 test("next/prev buttons turn pages and reach the end", async ({ page }) => {

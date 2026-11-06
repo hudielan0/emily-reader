@@ -14,6 +14,18 @@ const PNG = Buffer.from(
   "base64",
 );
 
+// 800x500 diagram with small text, like the figures in technical books
+const DIAGRAM_SVG = `<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+  <rect width="800" height="500" fill="#ffffff"/>
+  <rect x="40" y="60" width="300" height="140" rx="10" fill="#eef4f4" stroke="#336" stroke-width="3"/>
+  <rect x="460" y="60" width="300" height="140" rx="10" fill="#f4eeee" stroke="#633" stroke-width="3"/>
+  <line x1="340" y1="130" x2="460" y2="130" stroke="#333" stroke-width="3"/>
+  <text x="190" y="140" font-size="22" text-anchor="middle" font-family="sans-serif">Box A small text</text>
+  <text x="610" y="140" font-size="22" text-anchor="middle" font-family="sans-serif">Box B small text</text>
+  <text x="400" y="400" font-size="18" text-anchor="middle" font-family="sans-serif">test diagram</text>
+</svg>`;
+
 const ZH_PARAS = [
   "清晨的山路上还挂着薄雾，脚下的石阶被露水打湿，踩上去有一点滑。远处偶尔传来几声鸟叫，很快又安静下来。",
   "村口那棵老槐树据说已经有三百多年了。树下摆着两张竹椅，午后总有几位老人坐在那里，看着来往的人。",
@@ -31,10 +43,12 @@ export const BOOKS = {
   zh: {
     lang: "zh-CN", title: "测试书：山间小记", author: "测试作者",
     chapters: ["第一章　上山", "第二章　老槐树", "第三章　雨夜", "第四章　告别"], paras: ZH_PARAS,
+    figure: "图 1-1 测试示意图",
   },
   en: {
     lang: "en", title: "Test Book: The Lighthouse", author: "Test Author",
     chapters: ["Chapter 1 The Island", "Chapter 2 Letters", "Chapter 3 The Storm", "Chapter 4 Goodbye"], paras: EN_PARAS,
+    figure: "Figure 1-1 Test diagram",
   },
 };
 
@@ -44,7 +58,10 @@ function chapterXhtml(book, i) {
   const body = [];
   body.push(`<h1>${esc(book.chapters[i])}</h1>`);
   for (let k = 0; k < 30; k++) body.push(`<p>${esc(book.paras[(i + k) % book.paras.length])}</p>`);
-  if (i === 0) body.splice(3, 0, `<p><img src="../images/dot.png" alt="test image" style="width:120px"/></p>`);
+  if (i === 0) {
+    body.splice(3, 0, `<p><img src="../images/dot.png" alt="test image" style="width:120px"/></p>`);
+    body.splice(2, 0, `<figure><img src="../images/diagram.svg" alt="diagram" style="width:100%"/><figcaption>${esc(book.figure)}</figcaption></figure>`);
+  }
   if (i === 1) {
     body.splice(4, 0, `<pre><code>const veryLongLine = "${"x".repeat(160)}"; // long code line</code></pre>`);
     const cells = n => Array.from({ length: 8 }, (_, c) => `<${n}>column-${c + 1}-content</${n}>`).join("");
@@ -82,6 +99,7 @@ export async function makeEpub(key) {
   <manifest>
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
     <item id="img" href="images/dot.png" media-type="image/png"/>
+    <item id="diagram" href="images/diagram.svg" media-type="image/svg+xml"/>
     ${items}
   </manifest>
   <spine>${spine}</spine>
@@ -94,6 +112,7 @@ export async function makeEpub(key) {
 <body><nav epub:type="toc"><ol>${navList}</ol></nav></body>
 </html>`);
   zip.file("OEBPS/images/dot.png", PNG);
+  zip.file("OEBPS/images/diagram.svg", DIAGRAM_SVG);
   book.chapters.forEach((_, i) => zip.file(`OEBPS/text/ch${i + 1}.xhtml`, chapterXhtml(book, i)));
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", mimeType: "application/epub+zip" });
 }

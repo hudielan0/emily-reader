@@ -22,6 +22,20 @@ function updateWhere(loc) {
   }
 }
 
+function showImage({ src, caption }) {
+  if (!src) return;
+  $("lightbox-img").src = src;
+  $("lightbox-img").alt = caption;
+  $("lightbox-caption").textContent = caption;
+  $("lightbox").hidden = false;
+  $("lightbox-close").focus(); // take focus out of the book page so Esc reaches us
+}
+
+function closeImage() {
+  $("lightbox").hidden = true;
+  $("lightbox-img").removeAttribute("src");
+}
+
 async function load(file) {
   if (!file) return;
   try {
@@ -30,7 +44,7 @@ async function load(file) {
     $("viewer").innerHTML = "";
     $("empty").hidden = true;
     $("reading").hidden = false;
-    reader = await openBook($("viewer"), data, { onRelocated: updateWhere });
+    reader = await openBook($("viewer"), data, { onRelocated: updateWhere, onImageClick: showImage });
     document.title = `${reader.meta.title} · Emily阅读`;
     $("chapters").innerHTML = reader.toc
       .map((t, i) => `<option value="${i}">${"　".repeat(t.depth)}${t.label.replace(/</g, "&lt;")}</option>`)
@@ -54,3 +68,7 @@ document.querySelectorAll("[data-file]").forEach(input =>
 $("prev").addEventListener("click", () => reader?.prev());
 $("next").addEventListener("click", () => reader?.next());
 $("chapters").addEventListener("change", e => reader?.goto(reader.toc[+e.target.value].href));
+$("lightbox").addEventListener("click", closeImage);
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !$("lightbox").hidden) closeImage();
+});

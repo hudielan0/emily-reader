@@ -15,6 +15,9 @@ describe("test EPUB generator", () => {
       expect(opf).toContain(`<dc:language>${BOOKS[key].lang}</dc:language>`);
       expect(zip.file("OEBPS/nav.xhtml")).toBeTruthy();
       expect(zip.file("OEBPS/images/dot.png")).toBeTruthy();
+      expect(await zip.file("OEBPS/images/diagram.svg").async("string")).toContain('width="800"');
+      const ch1 = await zip.file("OEBPS/text/ch1.xhtml").async("string");
+      expect(ch1).toContain(`<figcaption>${BOOKS[key].figure}</figcaption>`);
       expect(Object.keys(zip.files).filter(f => /^OEBPS\/text\/ch\d+\.xhtml$/.test(f))).toHaveLength(4);
     });
   }
