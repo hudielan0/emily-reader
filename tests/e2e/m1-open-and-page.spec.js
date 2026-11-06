@@ -1,4 +1,4 @@
-// M1: open an EPUB, show it as a two-page spread, turn pages, jump chapters.
+// M1: open an EPUB, show it as a two-page spread, turn pages.
 import { test, expect } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 import { writeFileSync, mkdirSync } from "node:fs";
@@ -53,21 +53,13 @@ test("next/prev buttons turn pages and reach the end", async ({ page }) => {
   await expect(where).toHaveText("读完了");
 });
 
-test("chapter dropdown jumps to the chosen chapter", async ({ page }) => {
-  await open(page, "zh-sample.epub");
-  await expect(page.locator("#chapters option")).toHaveCount(4);
-  for (const [i, title] of [[2, "第三章　雨夜"], [1, "第二章　老槐树"], [3, "第四章　告别"]]) {
-    await page.selectOption("#chapters", String(i));
-    await expect(book(page).locator("h1")).toHaveText(title);
-  }
-});
-
 test("switching to an English book via 换书", async ({ page }) => {
   await open(page, "zh-sample.epub");
   await page.evaluate(() => (window.__reader = null));
   await open(page, "en-sample.epub", "#reading [data-file]");
   await expect(book(page).locator("h1")).toHaveText("Chapter 1 The Island");
-  await expect(page.locator("#chapters option").first()).toHaveText("Chapter 1 The Island");
+  await page.click("#toc-btn");
+  await expect(page.locator("#toc-list .lbl").first()).toHaveText("Chapter 1 The Island");
 });
 
 test("narrow window shows a single page", async ({ page }) => {

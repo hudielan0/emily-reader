@@ -44,11 +44,15 @@ export const BOOKS = {
     lang: "zh-CN", title: "测试书：山间小记", author: "测试作者",
     chapters: ["第一章　上山", "第二章　老槐树", "第三章　雨夜", "第四章　告别"], paras: ZH_PARAS,
     figure: "图 1-1 测试示意图",
+    sections: ["1.1 清晨", "1.2 午后"],
+    note: "注释：这是一个测试脚注。", noteRef: "这一段带有脚注",
   },
   en: {
     lang: "en", title: "Test Book: The Lighthouse", author: "Test Author",
     chapters: ["Chapter 1 The Island", "Chapter 2 Letters", "Chapter 3 The Storm", "Chapter 4 Goodbye"], paras: EN_PARAS,
     figure: "Figure 1-1 Test diagram",
+    sections: ["1.1 Morning", "1.2 Afternoon"],
+    note: "Note: this is a test footnote.", noteRef: "This paragraph has a footnote",
   },
 };
 
@@ -61,11 +65,17 @@ function chapterXhtml(book, i) {
   if (i === 0) {
     body.splice(3, 0, `<p><img src="../images/dot.png" alt="test image" style="width:120px"/></p>`);
     body.splice(2, 0, `<figure><img src="../images/diagram.svg" alt="diagram" style="width:100%"/><figcaption>${esc(book.figure)}</figcaption></figure>`);
+    // two sub-sections far enough apart to land on different pages
+    body.splice(12, 0, `<h2 id="s1-1">${esc(book.sections[0])}</h2>`);
+    body.splice(26, 0, `<h2 id="s1-2">${esc(book.sections[1])}</h2>`);
   }
   if (i === 1) {
     body.splice(4, 0, `<pre><code>const veryLongLine = "${"x".repeat(160)}"; // long code line</code></pre>`);
     const cells = n => Array.from({ length: 8 }, (_, c) => `<${n}>column-${c + 1}-content</${n}>`).join("");
     body.splice(6, 0, `<table><tr>${cells("th")}</tr><tr>${cells("td")}</tr></table>`);
+    // footnote reference near the start, footnote at the end of the chapter (like pandoc does)
+    body.splice(2, 0, `<p id="noteref-para">${esc(book.noteRef)}<a href="#fn1" class="footnote-ref" id="fnref1" epub:type="noteref" role="doc-noteref"><sup>1</sup></a></p>`);
+    body.push(`<aside epub:type="footnote" role="doc-footnote" id="fn1"><p>${esc(book.note)}</p></aside>`);
   }
   return `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
@@ -104,7 +114,10 @@ export async function makeEpub(key) {
   </manifest>
   <spine>${spine}</spine>
 </package>`);
-  const navList = book.chapters.map((t, i) => `<li><a href="text/ch${i + 1}.xhtml">${esc(t)}</a></li>`).join("");
+  const sub = i => (i === 0
+    ? `<ol>${book.sections.map((t, k) => `<li><a href="text/ch1.xhtml#s1-${k + 1}">${esc(t)}</a></li>`).join("")}</ol>`
+    : "");
+  const navList = book.chapters.map((t, i) => `<li><a href="text/ch${i + 1}.xhtml">${esc(t)}</a>${sub(i)}</li>`).join("");
   zip.file("OEBPS/nav.xhtml", `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">

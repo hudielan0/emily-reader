@@ -18,6 +18,12 @@ describe("test EPUB generator", () => {
       expect(await zip.file("OEBPS/images/diagram.svg").async("string")).toContain('width="800"');
       const ch1 = await zip.file("OEBPS/text/ch1.xhtml").async("string");
       expect(ch1).toContain(`<figcaption>${BOOKS[key].figure}</figcaption>`);
+      expect(ch1).toContain(`<h2 id="s1-2">`);
+      const nav = await zip.file("OEBPS/nav.xhtml").async("string");
+      expect(nav).toContain(`<ol><li><a href="text/ch1.xhtml#s1-1">`);
+      const ch2 = await zip.file("OEBPS/text/ch2.xhtml").async("string");
+      expect(ch2).toMatch(/id="fnref1"[^>]*epub:type="noteref"/);
+      expect(ch2).toContain(`<aside epub:type="footnote" role="doc-footnote" id="fn1">`);
       expect(Object.keys(zip.files).filter(f => /^OEBPS\/text\/ch\d+\.xhtml$/.test(f))).toHaveLength(4);
     });
   }

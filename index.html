@@ -17,13 +17,19 @@
   <section id="reading" class="reading" hidden>
     <div class="spread"><div id="viewer"></div></div>
     <div class="dock">
-      <!-- 临时：M3 会换成正式的目录弹窗 -->
-      <select id="chapters" title="章节（临时）"></select>
-      <button id="prev" title="上一页">◀</button>
+      <button id="toc-btn" title="目录">☰ 目录</button>
+      <button id="back" title="回到跳转前的位置" hidden>↩ 返回</button>
+      <button id="prev" title="上一页（←）">◀</button>
+      <input id="progress" type="range" min="0" max="1000" value="0" disabled title="正在计算全书进度…" aria-label="全书进度">
+      <button id="next" title="下一页（→）">▶</button>
       <span id="where" class="where"></span>
-      <button id="next" title="下一页">▶</button>
       <label class="btn">换书<input type="file" accept=".epub,application/epub+zip" data-file hidden></label>
     </div>
+    <div id="scrim" class="scrim" hidden></div>
+    <nav id="toc" class="toc-panel" aria-label="目录" hidden>
+      <div class="panel-head"><b>目录</b><button id="toc-close" class="icon" title="关闭（Esc）">✕</button></div>
+      <ol id="toc-list"></ol>
+    </nav>
   </section>
 
   <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="查看大图" hidden>
