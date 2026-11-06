@@ -115,3 +115,13 @@ test("a broken file while reading shows an error and returns to the open book", 
   await expect(book(page).locator("h1")).toHaveText("第二章　老槐树");
   errors = [];
 });
+
+test("switching books quickly, before the progress bar is ready, does not break anything", async ({ page }) => {
+  for (const name of ["zh-sample.epub", "en-sample.epub", "zh-sample.epub", "en-sample.epub"]) {
+    await choose(page, name); // each switch closes a book that may still be computing its progress table
+  }
+  await expect(book(page).locator("h1")).toHaveText("Chapter 1 The Island");
+  await expect(page.locator("#progress")).toBeEnabled({ timeout: 15_000 });
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator("#where")).not.toContainText("本章 1 /");
+});

@@ -26,6 +26,13 @@ const DIAGRAM_SVG = `<?xml version="1.0" encoding="utf-8"?>
   <text x="400" y="400" font-size="18" text-anchor="middle" font-family="sans-serif">test diagram</text>
 </svg>`;
 
+// Like many real books: own colours, and its own dark style that follows the system setting
+const BOOK_CSS = `:root { color-scheme: light dark; }
+body { color: #1f2328; }
+pre { background: #f5f5f5; }
+@media (prefers-color-scheme: dark) { body { color: #e6e6e6; background: #111111; } }
+`;
+
 const ZH_PARAS = [
   "清晨的山路上还挂着薄雾，脚下的石阶被露水打湿，踩上去有一点滑。远处偶尔传来几声鸟叫，很快又安静下来。",
   "村口那棵老槐树据说已经有三百多年了。树下摆着两张竹椅，午后总有几位老人坐在那里，看着来往的人。",
@@ -80,7 +87,7 @@ function chapterXhtml(book, i) {
   return `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${book.lang}" lang="${book.lang}">
-<head><title>${esc(book.chapters[i])}</title></head>
+<head><title>${esc(book.chapters[i])}</title><link rel="stylesheet" type="text/css" href="../styles/book.css"/></head>
 <body>
 ${body.join("\n")}
 </body>
@@ -110,6 +117,7 @@ export async function makeEpub(key) {
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
     <item id="img" href="images/dot.png" media-type="image/png"/>
     <item id="diagram" href="images/diagram.svg" media-type="image/svg+xml"/>
+    <item id="css" href="styles/book.css" media-type="text/css"/>
     ${items}
   </manifest>
   <spine>${spine}</spine>
@@ -126,6 +134,7 @@ export async function makeEpub(key) {
 </html>`);
   zip.file("OEBPS/images/dot.png", PNG);
   zip.file("OEBPS/images/diagram.svg", DIAGRAM_SVG);
+  zip.file("OEBPS/styles/book.css", BOOK_CSS);
   book.chapters.forEach((_, i) => zip.file(`OEBPS/text/ch${i + 1}.xhtml`, chapterXhtml(book, i)));
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", mimeType: "application/epub+zip" });
 }

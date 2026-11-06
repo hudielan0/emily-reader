@@ -2,6 +2,7 @@ import { openBook } from "./reader.js";
 import { pageKey } from "./keys.js";
 import { createTocPanel } from "./ui/toc-panel.js";
 import { createStore, bookId } from "./storage.js";
+import { DEFAULT_LOOK, FONT_SIZE, normalizeLook } from "./look.js";
 
 const $ = id => document.getElementById(id);
 let reader = null;
@@ -58,7 +59,41 @@ function openToc() {
 
 function closePanels() {
   if (tocPanel.isOpen) tocPanel.close();
+  $("look").hidden = true;
   $("scrim").hidden = true;
+}
+
+const anyPanelOpen = () => tocPanel.isOpen || !$("look").hidden;
+
+/* ---------- reading settings: font size, font, light/dark ---------- */
+
+let look = { ...DEFAULT_LOOK };
+
+function showLook() {
+  $("font-size").textContent = `${look.fontSize}%`;
+  $("font-down").disabled = look.fontSize <= FONT_SIZE.min;
+  $("font-up").disabled = look.fontSize >= FONT_SIZE.max;
+  document.querySelectorAll("[data-font]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.font === look.font)));
+  document.querySelectorAll("[data-theme]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.theme === look.theme)));
+  document.body.classList.toggle("dark", look.theme === "dark");
+}
+
+function openLook() {
+  closePanels();
+  showLook();
+  $("look").hidden = false;
+  $("scrim").hidden = false;
+  $("look-close").focus();
+}
+
+async function changeLook(patch) {
+  look = normalizeLook({ ...look, ...patch });
+  showLook();
+  safe(() => store.setSettings(look));
+  if (reader) {
+    await reader.setLook(look);
+    saveCurrentPosition();
+  }
 }
 
 /* ---------- footnotes / cross-references: go back ---------- */
@@ -175,13 +210,14 @@ async function openData(data, { id, isNewFile }) {
     onImageClick: showImage,
     onKeydown,
     onLinkFollowed: rememberBack,
+    look,
   });
   const opened = reader;
   document.title = `${reader.meta.title} · Emily阅读`;
   tocPanel.setToc(reader.toc);
   if (lastLoc) updateWhere(lastLoc);
-  reader.locationsReady.then(() => {
-    if (opened !== reader) return;
+  reader.locationsReady.then(ok => {
+    if (!ok || opened !== reader) return;
     enableProgress();
     if (!opened.locationsFromCache) safe(() => store.saveLocations(id, opened.saveLocations()));
   });
@@ -216,6 +252,8 @@ async function load(file) {
 
 // On page load: reopen the last book at its saved page, with no action needed.
 async function restore() {
+  look = normalizeLook(await safe(() => store.getSettings(DEFAULT_LOOK), DEFAULT_LOOK));
+  showLook();
   const id = await safe(() => store.getLastBookId());
   const saved = id ? await safe(() => store.getBook(id)) : null;
   if (!saved) {
@@ -236,7 +274,7 @@ function onKeydown(e) {
     if (e.key === "Escape") closeImage();
     return;
   }
-  if (tocPanel.isOpen) {
+  if (anyPanelOpen()) {
     if (e.key === "Escape") closePanels();
     return;
   }
@@ -254,7 +292,13 @@ document.querySelectorAll("[data-file]").forEach(input =>
 );
 $("prev").addEventListener("click", () => settle(reader?.prev()));
 $("next").addEventListener("click", () => settle(reader?.next()));
-$("toc-btn").addEventListener("click", () => (tocPanel.isOpen ? closePanels() : openToc()));
+$("toc-btn").addEventListener("click", () => (tocPanel.isOpen ? closePanels() : (closePanels(), openToc())));
+$("look-btn").addEventListener("click", () => ($("look").hidden ? openLook() : closePanels()));
+$("look-close").addEventListener("click", closePanels);
+$("font-down").addEventListener("click", () => changeLook({ fontSize: look.fontSize - FONT_SIZE.step }));
+$("font-up").addEventListener("click", () => changeLook({ fontSize: look.fontSize + FONT_SIZE.step }));
+document.querySelectorAll("[data-font]").forEach(b => b.addEventListener("click", () => changeLook({ font: b.dataset.font })));
+document.querySelectorAll("[data-theme]").forEach(b => b.addEventListener("click", () => changeLook({ theme: b.dataset.theme })));
 $("toc-close").addEventListener("click", closePanels);
 $("scrim").addEventListener("click", closePanels);
 $("back").addEventListener("click", goBack);

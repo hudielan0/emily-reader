@@ -2,6 +2,7 @@
 import ePub, { EpubCFI } from "epubjs";
 import { flattenToc, splitHref, sameFile } from "./toc.js";
 import { enableZoom } from "./zoom.js";
+import { lookCss, normalizeLook, stripSystemDark } from "./look.js";
 
 const OPEN_TIMEOUT_MS = 20_000;
 const CHARS_PER_LOCATION = 1600; // granularity of the whole-book progress bar
@@ -23,7 +24,7 @@ function withTimeout(promise, ms, message) {
 const cfi = new EpubCFI();
 
 // start: a saved position (CFI) to open at; locations: a saved progress table (JSON from a previous visit)
-export async function openBook(container, data, { start, locations, onRelocated, onImageClick, onKeydown, onLinkFollowed } = {}) {
+export async function openBook(container, data, { start, locations, look, onRelocated, onImageClick, onKeydown, onLinkFollowed } = {}) {
   if (!looksLikeEpub(data)) throw new Error("这不是有效的 EPUB 文件");
   const book = ePub(data);
   // epub.js never settles on some broken files, so give up after a while instead of hanging
@@ -37,6 +38,20 @@ export async function openBook(container, data, { start, locations, onRelocated,
     allowScriptedContent: false,
   });
 
+  // font size, font, light/dark and Chinese typography, injected into every section as it is shown
+  const { language: lang = "" } = await book.loaded.metadata;
+  let currentLook = normalizeLook(look);
+  const injectLook = doc => {
+    let el = doc.getElementById("er-look");
+    if (!el) {
+      el = doc.createElement("style");
+      el.id = "er-look";
+      doc.head.appendChild(el);
+    }
+    el.textContent = lookCss(currentLook, lang);
+  };
+  rendition.themes.fontSize(`${currentLook.fontSize}%`);
+
   let lastLocation = null;
   rendition.on("relocated", loc => {
     lastLocation = loc;
@@ -45,6 +60,8 @@ export async function openBook(container, data, { start, locations, onRelocated,
   // keys pressed while the book page (an iframe) has focus never reach the main page, so listen there too
   if (onKeydown) rendition.on("keydown", onKeydown);
   rendition.hooks.content.register(contents => {
+    stripSystemDark(contents.document);
+    injectLook(contents.document);
     if (onImageClick) enableZoom(contents.document, onImageClick);
     // remember where we were before following a link (footnote, cross-reference) so we can go back
     contents.on("linkClicked", () => {
@@ -92,10 +109,20 @@ export async function openBook(container, data, { start, locations, onRelocated,
       console.warn("saved progress table unusable, recomputing", err);
     }
   }
-  const locationsReady = (loadedFromCache ? Promise.resolve() : book.locations.generate(CHARS_PER_LOCATION)).then(() => {
-    const loc = rendition.currentLocation();
-    if (loc?.start) onRelocated?.(loc); // refresh so the current position gets a percentage
-  });
+  // Resolves true when percentages are available. Never rejects: if the book is closed while this is
+  // still computing (epub.js cannot cancel it), or it fails, the progress bar just stays off.
+  let destroyed = false;
+  const locationsReady = (loadedFromCache ? Promise.resolve() : book.locations.generate(CHARS_PER_LOCATION))
+    .then(() => {
+      if (destroyed) return false;
+      const loc = rendition.currentLocation();
+      if (loc?.start) onRelocated?.(loc); // refresh so the current position gets a percentage
+      return true;
+    })
+    .catch(err => {
+      if (!destroyed) console.warn("could not compute whole-book progress", err);
+      return false;
+    });
 
   return {
     book,
@@ -112,6 +139,18 @@ export async function openBook(container, data, { start, locations, onRelocated,
     percentOf: loc => (book.locations.length() ? book.locations.percentageFromCfi(loc.start.cfi) : null),
     gotoPercent: p => rendition.display(book.locations.cfiFromPercentage(Math.min(1, Math.max(0, p)))),
     isSpread: () => rendition._layout?.divisor === 2,
-    destroy: () => book.destroy(),
+    lang,
+    // Change how the page looks; the reading position is kept (epub.js re-lays out around the current CFI).
+    async setLook(next) {
+      const before = rendition.currentLocation()?.start?.cfi;
+      currentLook = normalizeLook(next);
+      rendition.getContents().forEach(c => injectLook(c.document));
+      rendition.themes.fontSize(`${currentLook.fontSize}%`);
+      if (before) await rendition.display(before);
+    },
+    destroy: () => {
+      destroyed = true;
+      book.destroy();
+    },
   };
 }

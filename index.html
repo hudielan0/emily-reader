@@ -23,6 +23,7 @@
       <input id="progress" type="range" min="0" max="1000" value="0" disabled title="正在计算全书进度…" aria-label="全书进度">
       <button id="next" title="下一页（→）">▶</button>
       <span id="where" class="where"></span>
+      <button id="look-btn" title="字号、字体、深色">Aa</button>
       <label class="btn">换书<input type="file" accept=".epub,application/epub+zip" data-file hidden></label>
     </div>
     <div id="scrim" class="scrim" hidden></div>
@@ -30,6 +31,21 @@
       <div class="panel-head"><b>目录</b><button id="toc-close" class="icon" title="关闭（Esc）">✕</button></div>
       <ol id="toc-list"></ol>
     </nav>
+    <div id="look" class="look-panel" role="dialog" aria-label="阅读设置" hidden>
+      <div class="panel-head"><b>阅读设置</b><button id="look-close" class="icon" title="关闭（Esc）">✕</button></div>
+      <div class="look-row">
+        <span>字号</span>
+        <span class="seg"><button id="font-down" title="字小一点">A−</button><output id="font-size">100%</output><button id="font-up" title="字大一点">A+</button></span>
+      </div>
+      <div class="look-row">
+        <span>字体</span>
+        <span class="seg" role="radiogroup"><button data-font="sans" role="radio">黑体</button><button data-font="serif" role="radio">宋体</button></span>
+      </div>
+      <div class="look-row">
+        <span>颜色</span>
+        <span class="seg" role="radiogroup"><button data-theme="light" role="radio">☀︎ 浅色</button><button data-theme="dark" role="radio">☾ 深色</button></span>
+      </div>
+    </div>
   </section>
 
   <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="查看大图" hidden>

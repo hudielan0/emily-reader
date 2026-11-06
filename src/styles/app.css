@@ -62,3 +62,19 @@ button.icon { border: none; background: none; padding: 4px 8px; }
 #toc-list li.in > .lbl { color: var(--accent); }
 #toc-list li.on > .lbl { background: var(--desk); color: var(--accent); font-weight: 600; }
 #toc-list .lbl:hover { color: var(--accent); }
+
+/* Reading settings panel (opens above the dock, on the right) */
+.look-panel { position: fixed; z-index: 30; right: max(16px, calc(50vw - 600px)); bottom: 72px; width: min(320px, calc(100vw - 32px)); background: var(--paper); border-radius: 10px; box-shadow: var(--shadow), 0 0 0 1px var(--line); padding-bottom: 8px; }
+.look-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; }
+.seg { display: inline-flex; align-items: center; gap: 6px; }
+.seg output { min-width: 48px; text-align: center; font-variant-numeric: tabular-nums; }
+.seg button[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* The book page never follows the system dark mode by itself (some books ship their own dark styles);
+   dark mode is ours: invert the page, pictures are inverted back inside the book (see look.js). */
+#viewer iframe { color-scheme: light; }
+body.dark #viewer iframe { filter: invert(1) hue-rotate(180deg); }
+body.dark {
+  --desk: #161513; --paper: #232220; --ink: #d9d3c7; --muted: #8d867a; --line: #3a3732;
+  --accent: #e08a5c; --shadow: 0 6px 24px rgba(0, 0, 0, .5);
+}
