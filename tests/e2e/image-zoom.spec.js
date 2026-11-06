@@ -55,8 +55,8 @@ test("tiny pictures are not enlarged", async ({ page }) => {
 });
 
 test("pictures in a later chapter can be enlarged too", async ({ page }) => {
-  await page.selectOption("#chapters", "2");
-  await page.selectOption("#chapters", "0");
+  await page.evaluate(() => window.__reader.goto(window.__reader.toc[4].href)); // 第三章
+  await page.evaluate(() => window.__reader.goto(window.__reader.toc[0].href)); // back to 第一章
   await book(page).locator('img[alt="diagram"]').click();
   await expect(lightbox(page)).toBeVisible();
 });

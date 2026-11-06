@@ -1,9 +1,11 @@
 // Thin wrapper around epub.js: open a book into a container in two-page ("spread") mode.
-import ePub from "epubjs";
-import { flattenToc } from "./toc.js";
+import ePub, { EpubCFI } from "epubjs";
+import { flattenToc, splitHref, sameFile } from "./toc.js";
 import { enableZoom } from "./zoom.js";
+import { lookCss, normalizeLook, stripSystemDark } from "./look.js";
 
 const OPEN_TIMEOUT_MS = 20_000;
+const CHARS_PER_LOCATION = 1600; // granularity of the whole-book progress bar
 
 // An EPUB is a ZIP file, which always starts with "PK\x03\x04".
 export function looksLikeEpub(data) {
@@ -19,7 +21,10 @@ function withTimeout(promise, ms, message) {
   ]).finally(() => clearTimeout(timer));
 }
 
-export async function openBook(container, data, { onRelocated, onImageClick } = {}) {
+const cfi = new EpubCFI();
+
+// start: a saved position (CFI) to open at; locations: a saved progress table (JSON from a previous visit)
+export async function openBook(container, data, { start, locations, look, onRelocated, onImageClick, onKeydown, onLinkFollowed } = {}) {
   if (!looksLikeEpub(data)) throw new Error("这不是有效的 EPUB 文件");
   const book = ePub(data);
   // epub.js never settles on some broken files, so give up after a while instead of hanging
@@ -32,20 +37,120 @@ export async function openBook(container, data, { onRelocated, onImageClick } = 
     minSpreadWidth: 800,  // narrower than this → single page
     allowScriptedContent: false,
   });
-  if (onRelocated) rendition.on("relocated", onRelocated);
-  if (onImageClick) rendition.hooks.content.register(contents => enableZoom(contents.document, onImageClick));
-  await rendition.display();
+
+  // font size, font, light/dark and Chinese typography, injected into every section as it is shown
+  const { language: lang = "" } = await book.loaded.metadata;
+  let currentLook = normalizeLook(look);
+  const injectLook = doc => {
+    let el = doc.getElementById("er-look");
+    if (!el) {
+      el = doc.createElement("style");
+      el.id = "er-look";
+      doc.head.appendChild(el);
+    }
+    el.textContent = lookCss(currentLook, lang);
+  };
+  rendition.themes.fontSize(`${currentLook.fontSize}%`);
+
+  let lastLocation = null;
+  rendition.on("relocated", loc => {
+    lastLocation = loc;
+    onRelocated?.(loc);
+  });
+  // keys pressed while the book page (an iframe) has focus never reach the main page, so listen there too
+  if (onKeydown) rendition.on("keydown", onKeydown);
+  rendition.hooks.content.register(contents => {
+    stripSystemDark(contents.document);
+    injectLook(contents.document);
+    if (onImageClick) enableZoom(contents.document, onImageClick);
+    // remember where we were before following a link (footnote, cross-reference) so we can go back
+    contents.on("linkClicked", () => {
+      if (lastLocation) onLinkFollowed?.(lastLocation.start.cfi);
+    });
+  });
+
+  try {
+    await rendition.display(start || undefined);
+  } catch (err) {
+    if (!start) throw err;
+    console.warn("saved position not found, opening at the start", err);
+    await rendition.display();
+  }
   const [nav, meta] = await Promise.all([book.loaded.navigation, book.loaded.metadata]);
+  const toc = flattenToc(nav.toc);
+
+  // The TOC entry the reader is in: the last entry whose heading is on screen or before it.
+  // (Compared with the END of what is shown: with two pages, a heading in the middle of the screen already counts.)
+  function currentTocIndex(loc = lastLocation) {
+    const href = loc?.start?.href;
+    if (!href) return -1;
+    const endCfi = loc.end?.cfi || loc.start.cfi;
+    let best = -1;
+    for (let i = 0; i < toc.length; i++) {
+      const { file, anchor } = splitHref(toc[i].href);
+      if (!sameFile(file, href)) continue;
+      if (best === -1 || !anchor) { best = i; continue; } // first entry of this file is the fallback
+      for (const c of rendition.getContents()) {
+        const el = c.document.getElementById(anchor);
+        if (el && cfi.compare(c.cfiFromNode(el), endCfi) <= 0) best = i;
+      }
+    }
+    return best;
+  }
+
+  // Whole-book percentage needs a pass over the book; reuse a saved table, otherwise compute it
+  // after the first page is on screen.
+  let loadedFromCache = false;
+  if (locations) {
+    try {
+      book.locations.load(locations);
+      loadedFromCache = book.locations.length() > 0;
+    } catch (err) {
+      console.warn("saved progress table unusable, recomputing", err);
+    }
+  }
+  // Resolves true when percentages are available. Never rejects: if the book is closed while this is
+  // still computing (epub.js cannot cancel it), or it fails, the progress bar just stays off.
+  let destroyed = false;
+  const locationsReady = (loadedFromCache ? Promise.resolve() : book.locations.generate(CHARS_PER_LOCATION))
+    .then(() => {
+      if (destroyed) return false;
+      const loc = rendition.currentLocation();
+      if (loc?.start) onRelocated?.(loc); // refresh so the current position gets a percentage
+      return true;
+    })
+    .catch(err => {
+      if (!destroyed) console.warn("could not compute whole-book progress", err);
+      return false;
+    });
 
   return {
     book,
     rendition,
     meta,
-    toc: flattenToc(nav.toc),
+    toc,
+    locationsReady,
+    locationsFromCache: loadedFromCache,
+    saveLocations: () => book.locations.save(),
+    currentTocIndex,
     next: () => rendition.next(),
     prev: () => rendition.prev(),
     goto: target => rendition.display(target),
+    percentOf: loc => (book.locations.length() ? book.locations.percentageFromCfi(loc.start.cfi) : null),
+    gotoPercent: p => rendition.display(book.locations.cfiFromPercentage(Math.min(1, Math.max(0, p)))),
     isSpread: () => rendition._layout?.divisor === 2,
-    destroy: () => book.destroy(),
+    lang,
+    // Change how the page looks; the reading position is kept (epub.js re-lays out around the current CFI).
+    async setLook(next) {
+      const before = rendition.currentLocation()?.start?.cfi;
+      currentLook = normalizeLook(next);
+      rendition.getContents().forEach(c => injectLook(c.document));
+      rendition.themes.fontSize(`${currentLook.fontSize}%`);
+      if (before) await rendition.display(before);
+    },
+    destroy: () => {
+      destroyed = true;
+      book.destroy();
+    },
   };
 }

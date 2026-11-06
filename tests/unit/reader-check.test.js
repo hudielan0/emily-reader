@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-vi.mock("epubjs", () => ({ default: () => ({}) })); // epub.js needs a browser; not under test here
+vi.mock("epubjs", () => ({ default: () => ({}), EpubCFI: class {} })); // epub.js needs a browser; not under test here
 const { looksLikeEpub } = await import("../../src/reader.js");
 
 const bytes = arr => new Uint8Array(arr).buffer;
