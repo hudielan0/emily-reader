@@ -1,4 +1,5 @@
 import { openBook } from "./reader.js";
+import { pageKey } from "./keys.js";
 
 const $ = id => document.getElementById(id);
 let reader = null;
@@ -44,7 +45,7 @@ async function load(file) {
     $("viewer").innerHTML = "";
     $("empty").hidden = true;
     $("reading").hidden = false;
-    reader = await openBook($("viewer"), data, { onRelocated: updateWhere, onImageClick: showImage });
+    reader = await openBook($("viewer"), data, { onRelocated: updateWhere, onImageClick: showImage, onKeydown });
     document.title = `${reader.meta.title} · Emily阅读`;
     $("chapters").innerHTML = reader.toc
       .map((t, i) => `<option value="${i}">${"　".repeat(t.depth)}${t.label.replace(/</g, "&lt;")}</option>`)
@@ -69,6 +70,14 @@ $("prev").addEventListener("click", () => reader?.prev());
 $("next").addEventListener("click", () => reader?.next());
 $("chapters").addEventListener("change", e => reader?.goto(reader.toc[+e.target.value].href));
 $("lightbox").addEventListener("click", closeImage);
-document.addEventListener("keydown", e => {
-  if (e.key === "Escape" && !$("lightbox").hidden) closeImage();
-});
+function onKeydown(e) {
+  if (!$("lightbox").hidden) {
+    if (e.key === "Escape") closeImage();
+    return;
+  }
+  const dir = pageKey(e);
+  if (!dir || !reader) return;
+  e.preventDefault();
+  dir === "next" ? reader.next() : reader.prev();
+}
+document.addEventListener("keydown", onKeydown);

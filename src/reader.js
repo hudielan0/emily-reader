@@ -19,7 +19,7 @@ function withTimeout(promise, ms, message) {
   ]).finally(() => clearTimeout(timer));
 }
 
-export async function openBook(container, data, { onRelocated, onImageClick } = {}) {
+export async function openBook(container, data, { onRelocated, onImageClick, onKeydown } = {}) {
   if (!looksLikeEpub(data)) throw new Error("这不是有效的 EPUB 文件");
   const book = ePub(data);
   // epub.js never settles on some broken files, so give up after a while instead of hanging
@@ -33,6 +33,8 @@ export async function openBook(container, data, { onRelocated, onImageClick } = 
     allowScriptedContent: false,
   });
   if (onRelocated) rendition.on("relocated", onRelocated);
+  // keys pressed while the book page (an iframe) has focus never reach the main page, so listen there too
+  if (onKeydown) rendition.on("keydown", onKeydown);
   if (onImageClick) rendition.hooks.content.register(contents => enableZoom(contents.document, onImageClick));
   await rendition.display();
   const [nav, meta] = await Promise.all([book.loaded.navigation, book.loaded.metadata]);
