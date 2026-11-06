@@ -1,6 +1,7 @@
 import { openBook } from "./reader.js";
 import { pageKey } from "./keys.js";
 import { createTocPanel } from "./ui/toc-panel.js";
+import { createStore, bookId } from "./storage.js";
 
 const $ = id => document.getElementById(id);
 let reader = null;
@@ -45,7 +46,7 @@ const tocPanel = createTocPanel({
   list: $("toc-list"),
   onPick: entry => {
     closePanels();
-    reader?.goto(entry.href);
+    settle(reader?.goto(entry.href));
   },
 });
 
@@ -69,7 +70,7 @@ function rememberBack(cfi) {
 
 function goBack() {
   if (!backTo || !reader) return;
-  reader.goto(backTo);
+  settle(reader.goto(backTo));
   backTo = null;
   $("back").hidden = true;
 }
@@ -90,41 +91,141 @@ function closeImage() {
   $("lightbox-img").removeAttribute("src");
 }
 
+/* ---------- remembering books and positions ---------- */
+
+let store = null;
+try {
+  store = createStore();
+  navigator.storage?.persist?.(); // ask the browser not to clear our data when disk space runs low
+} catch (err) {
+  console.warn(err);
+}
+let currentId = null;
+let storageWarned = false;
+
+// Storage problems must never stop reading: log, warn once, carry on.
+async function safe(fn, fallback = null) {
+  if (!store) return fallback;
+  try {
+    return await fn();
+  } catch (err) {
+    console.warn("storage:", err);
+    if (!storageWarned) {
+      storageWarned = true;
+      showError("浏览器存储出了问题：这次读到的位置可能记不住");
+    }
+    return fallback;
+  }
+}
+
+function savePosition(loc) {
+  const id = currentId;
+  if (id && loc?.start?.cfi) {
+    safe(() => store.savePosition(id, { cfi: loc.start.cfi, percent: loc.start.percentage ?? null }));
+  }
+}
+
+function onRelocated(loc) {
+  updateWhere(loc);
+  savePosition(loc);
+}
+
+// epub.js reports a new position only on the next animation frame, which can be too late if the page
+// is closed right away. So also save as soon as each page turn or jump finishes, and when the page is hidden.
+function saveCurrentPosition() {
+  try {
+    savePosition(reader?.rendition.currentLocation());
+  } catch (err) {
+    console.warn(err);
+  }
+}
+
+async function settle(navigation) {
+  await navigation;
+  saveCurrentPosition();
+}
+
+addEventListener("pagehide", saveCurrentPosition);
+document.addEventListener("visibilitychange", () => document.visibilityState === "hidden" && saveCurrentPosition());
+
 /* ---------- opening a book ---------- */
 
+function resetReadingView() {
+  reader?.destroy();
+  reader = null;
+  lastLoc = null;
+  closePanels();
+  backTo = null;
+  $("back").hidden = true;
+  $("progress").disabled = true;
+  $("progress").value = "0";
+  $("viewer").innerHTML = "";
+  $("empty").hidden = true;
+  $("reading").hidden = false;
+}
+
+async function openData(data, { id, isNewFile }) {
+  resetReadingView();
+  currentId = id;
+  const [pos, locations] = await Promise.all([safe(() => store.getPosition(id)), safe(() => store.getLocations(id))]);
+  reader = await openBook($("viewer"), data, {
+    start: pos?.cfi,
+    locations,
+    onRelocated,
+    onImageClick: showImage,
+    onKeydown,
+    onLinkFollowed: rememberBack,
+  });
+  const opened = reader;
+  document.title = `${reader.meta.title} · Emily阅读`;
+  tocPanel.setToc(reader.toc);
+  if (lastLoc) updateWhere(lastLoc);
+  reader.locationsReady.then(() => {
+    if (opened !== reader) return;
+    enableProgress();
+    if (!opened.locationsFromCache) safe(() => store.saveLocations(id, opened.saveLocations()));
+  });
+  if (isNewFile) {
+    const { title = "", creator = "", language = "" } = reader.meta || {};
+    await safe(() => store.saveBook({ id, data, title, author: creator, lang: language }));
+  }
+  await safe(() => store.setLastBookId(id));
+  window.__reader = reader; // for automated tests
+}
+
+function showOpenError(err) {
+  console.error(err);
+  reader = null;
+  currentId = null;
+  $("reading").hidden = true;
+  $("empty").hidden = false;
+  showError(`这本书打不开：${err.message || err}`);
+}
+
+// A file chosen by the reader: new books are saved; books seen before continue where they were left.
 async function load(file) {
   if (!file) return;
   try {
     const data = await file.arrayBuffer();
-    reader?.destroy();
-    reader = null;
-    lastLoc = null;
-    closePanels();
-    backTo = null;
-    $("back").hidden = true;
-    $("progress").disabled = true;
-    $("progress").value = "0";
-    $("viewer").innerHTML = "";
-    $("empty").hidden = true;
-    $("reading").hidden = false;
-    reader = await openBook($("viewer"), data, {
-      onRelocated: updateWhere,
-      onImageClick: showImage,
-      onKeydown,
-      onLinkFollowed: rememberBack,
-    });
-    document.title = `${reader.meta.title} · Emily阅读`;
-    tocPanel.setToc(reader.toc);
-    if (lastLoc) updateWhere(lastLoc);
-    const opened = reader;
-    reader.locationsReady.then(() => opened === reader && enableProgress());
-    window.__reader = reader; // for automated tests
+    await openData(data, { id: await bookId(data), isNewFile: true });
   } catch (err) {
-    console.error(err);
-    reader = null;
-    $("reading").hidden = true;
+    showOpenError(err);
+    restore(); // go back to the book that was open before, if any
+  }
+}
+
+// On page load: reopen the last book at its saved page, with no action needed.
+async function restore() {
+  const id = await safe(() => store.getLastBookId());
+  const saved = id ? await safe(() => store.getBook(id)) : null;
+  if (!saved) {
     $("empty").hidden = false;
-    showError(`这本书打不开：${err.message || err}`);
+    return;
+  }
+  try {
+    await openData(saved.data, { id, isNewFile: false });
+  } catch (err) {
+    showOpenError(err);
   }
 }
 
@@ -142,7 +243,7 @@ function onKeydown(e) {
   const dir = pageKey(e);
   if (!dir || !reader) return;
   e.preventDefault();
-  dir === "next" ? reader.next() : reader.prev();
+  settle(dir === "next" ? reader.next() : reader.prev());
 }
 
 document.querySelectorAll("[data-file]").forEach(input =>
@@ -151,8 +252,8 @@ document.querySelectorAll("[data-file]").forEach(input =>
     e.target.value = ""; // allow choosing the same file again
   }),
 );
-$("prev").addEventListener("click", () => reader?.prev());
-$("next").addEventListener("click", () => reader?.next());
+$("prev").addEventListener("click", () => settle(reader?.prev()));
+$("next").addEventListener("click", () => settle(reader?.next()));
 $("toc-btn").addEventListener("click", () => (tocPanel.isOpen ? closePanels() : openToc()));
 $("toc-close").addEventListener("click", closePanels);
 $("scrim").addEventListener("click", closePanels);
@@ -165,8 +266,10 @@ bar.addEventListener("input", () => {
 });
 bar.addEventListener("change", async () => {
   dragging = false;
-  if (reader) await reader.gotoPercent(bar.value / 1000);
+  if (reader) await settle(reader.gotoPercent(bar.value / 1000));
 });
 
 $("lightbox").addEventListener("click", closeImage);
 document.addEventListener("keydown", onKeydown);
+
+restore();

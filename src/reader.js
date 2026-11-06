@@ -22,7 +22,8 @@ function withTimeout(promise, ms, message) {
 
 const cfi = new EpubCFI();
 
-export async function openBook(container, data, { onRelocated, onImageClick, onKeydown, onLinkFollowed } = {}) {
+// start: a saved position (CFI) to open at; locations: a saved progress table (JSON from a previous visit)
+export async function openBook(container, data, { start, locations, onRelocated, onImageClick, onKeydown, onLinkFollowed } = {}) {
   if (!looksLikeEpub(data)) throw new Error("这不是有效的 EPUB 文件");
   const book = ePub(data);
   // epub.js never settles on some broken files, so give up after a while instead of hanging
@@ -51,7 +52,13 @@ export async function openBook(container, data, { onRelocated, onImageClick, onK
     });
   });
 
-  await rendition.display();
+  try {
+    await rendition.display(start || undefined);
+  } catch (err) {
+    if (!start) throw err;
+    console.warn("saved position not found, opening at the start", err);
+    await rendition.display();
+  }
   const [nav, meta] = await Promise.all([book.loaded.navigation, book.loaded.metadata]);
   const toc = flattenToc(nav.toc);
 
@@ -74,8 +81,18 @@ export async function openBook(container, data, { onRelocated, onImageClick, onK
     return best;
   }
 
-  // Whole-book percentage needs a pass over the book; do it after the first page is on screen.
-  const locationsReady = book.locations.generate(CHARS_PER_LOCATION).then(() => {
+  // Whole-book percentage needs a pass over the book; reuse a saved table, otherwise compute it
+  // after the first page is on screen.
+  let loadedFromCache = false;
+  if (locations) {
+    try {
+      book.locations.load(locations);
+      loadedFromCache = book.locations.length() > 0;
+    } catch (err) {
+      console.warn("saved progress table unusable, recomputing", err);
+    }
+  }
+  const locationsReady = (loadedFromCache ? Promise.resolve() : book.locations.generate(CHARS_PER_LOCATION)).then(() => {
     const loc = rendition.currentLocation();
     if (loc?.start) onRelocated?.(loc); // refresh so the current position gets a percentage
   });
@@ -86,6 +103,8 @@ export async function openBook(container, data, { onRelocated, onImageClick, onK
     meta,
     toc,
     locationsReady,
+    locationsFromCache: loadedFromCache,
+    saveLocations: () => book.locations.save(),
     currentTocIndex,
     next: () => rendition.next(),
     prev: () => rendition.prev(),
